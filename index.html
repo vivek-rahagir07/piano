@@ -116,8 +116,8 @@
         <!-- Connection and camera toggling controls -->
         <div class="flex items-center space-x-2.5">
             <button onclick="toggleVideoFeed()" class="text-slate-500 hover:text-indigo-600 bg-white/80 border border-slate-200/80 hover:border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-1.5 shadow-sm active:scale-95">
-                <i class="fa-solid fa-eye-slash text-[10px]"></i>
-                <span class="text-[11px]">Toggle Video Feed</span>
+                <i id="eye-icon" class="fa-solid fa-eye text-[10px]"></i>
+                <span class="text-[11px]">Toggle Feed Visuals</span>
             </button>
             
             <div class="flex items-center space-x-2 bg-white/80 px-3.5 py-1.5 rounded-xl border border-slate-200/80 shadow-sm">
@@ -283,7 +283,7 @@
                     </div>
                     <div>
                         <h4 class="text-xs font-bold text-slate-800">Air Space Playground</h4>
-                        <p class="text-[10px] text-slate-400 mt-0.5 leading-normal">Position your hand in direct view of your camera. Raise your index finger to write music touchlessly in the sky.</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5 leading-normal">Position your hand in direct view of your camera. Hover your index finger over the top piano keys, or click/tap directly on the canvas to play notes instantly!</p>
                     </div>
                 </div>
                 
@@ -313,7 +313,7 @@
                 </div>
 
                 <!-- Main Canvas output (draws landmarks and interactive pointer coordinates) -->
-                <canvas id="output_canvas" class="absolute w-full h-full object-cover rounded-2xl"></canvas>
+                <canvas id="output_canvas" class="absolute w-full h-full object-cover rounded-2xl cursor-pointer"></canvas>
                 
                 <!-- Silent Camera input stream -->
                 <video id="webcam" class="hidden" autoplay playsinline></video>
@@ -827,7 +827,42 @@
 
         function toggleVideoFeed() {
             showFeed = !showFeed;
+            const eyeIcon = document.getElementById('eye-icon');
+            if (showFeed) {
+                eyeIcon.className = "fa-solid fa-eye text-[10px]";
+            } else {
+                eyeIcon.className = "fa-solid fa-eye-slash text-[10px]";
+            }
         }
+
+        // Allow direct clicking/tapping on the canvas's keys for instant premium feedback
+        canvasElement.addEventListener('mousedown', (e) => {
+            if (currentPlayMode !== 'trigger') return;
+            const rect = canvasElement.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            // Normalize click coordinates relative to current dimensions
+            const normX = clickX / rect.width;
+            const normY = clickY / rect.height;
+            
+            const keyZoneHeight = 0.32; // height trigger threshold
+            if (normY < keyZoneHeight) {
+                const targetCol = Math.floor(normX * 8);
+                if (targetCol >= 0 && targetCol < 8) {
+                    playManualKey(targetCol);
+                    
+                    // Create an aesthetic temporary ripple point
+                    pointerTrail.push({
+                        x: normX * canvasElement.width,
+                        y: normY * canvasElement.height,
+                        r: 25,
+                        alpha: 1.0,
+                        color: '99, 102, 241'
+                    });
+                }
+            }
+        });
 
         // Frame loop processing callback
         function onResults(results) {
@@ -894,20 +929,20 @@
                     if (lastPlayedKey === i) {
                         // High-fidelity active key gradient highlight
                         const grad = canvasCtx.createLinearGradient(keyLeft, 0, keyLeft, keyZoneHeight);
-                        grad.addColorStop(0, 'rgba(99, 102, 241, 0.18)');
-                        grad.addColorStop(0.5, 'rgba(236, 72, 153, 0.08)');
+                        grad.addColorStop(0, 'rgba(99, 102, 241, 0.22)');
+                        grad.addColorStop(0.5, 'rgba(236, 72, 153, 0.12)');
                         grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
                         canvasCtx.fillStyle = grad;
                         canvasCtx.fillRect(keyLeft, 0, keyWidth, keyZoneHeight);
                         
-                        canvasCtx.strokeStyle = 'rgba(79, 70, 229, 0.65)';
+                        canvasCtx.strokeStyle = 'rgba(79, 70, 229, 0.7)';
                         canvasCtx.lineWidth = 3.5;
                     } else {
                         // Clean borders
-                        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
                         canvasCtx.fillRect(keyLeft, 0, keyWidth, keyZoneHeight);
                         
-                        canvasCtx.strokeStyle = 'rgba(100, 116, 139, 0.06)';
+                        canvasCtx.strokeStyle = 'rgba(100, 116, 139, 0.08)';
                         canvasCtx.lineWidth = 1;
                     }
 
@@ -1106,7 +1141,7 @@
                         <i class="fa-solid fa-video text-sm"></i>
                     </div>
                     <h3 class="text-xs font-bold text-slate-800">Webcam Stream Paused</h3>
-                    <p class="text-[10px] text-slate-400 mt-1 max-w-sm px-6 leading-relaxed">Device camera access is restricted. Use the interactive <strong>Backup Tactile Keypads</strong> inside the right panel to play and practice melodies immediately!</p>
+                    <p class="text-[10px] text-slate-400 mt-1 max-w-sm px-6 leading-relaxed">Device camera access is restricted. Use the interactive <strong>Backup Tactile Keypads</strong> inside the right panel, or click directly on the canvas columns, to play and practice melodies immediately!</p>
                 `;
             }
         });
