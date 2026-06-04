@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50/50 text-slate-800">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraPlay - Air Gesture Synth & Piano</title>
+    <!-- Tailwind CSS for utility styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            950: '#0f172a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        serif: ['"Playfair Display"', 'serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Premium humanist font families -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- MediaPipe dependencies for camera and hand tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* Modern subtle glassmorphism */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(226, 232, 240, 0.6);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.55);
+            border: 1px solid rgba(241, 245, 249, 0.8);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.01);
+        }
+        
+        /* Ultra premium range input styles */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: #e2e8f0;
+            border-radius: 9999px;
+            height: 5px;
+            transition: background 0.2s;
+        }
+        input[type="range"]:focus {
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #4f46e5;
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.25);
+        }
+
+        /* Scrollbar aesthetics */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50/20 to-rose-50/10">
+
+    <!-- Top Premium Navigation -->
+    <header class="glass-panel border-b border-slate-200/50 px-6 py-3.5 flex flex-wrap items-center justify-between z-10 shrink-0 gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-500 to-indigo-600 flex items-center justify-center shadow-md shadow-indigo-100">
+                <i class="fa-solid fa-feather-pointed text-white text-base"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="text-lg font-bold tracking-tight text-slate-900">AuraPlay</h1>
+                    <span class="bg-indigo-50 text-indigo-600 text-[9px] font-bold px-2 py-0.5 rounded-md border border-indigo-100/60 uppercase tracking-wider">Air Synth</span>
+                </div>
+                <p class="text-[10px] text-slate-400 font-medium tracking-wide">Touchless Gestural Acoustic Canvas</p>
+            </div>
+        </div>
+
+        <!-- Connection and camera toggling controls -->
+        <div class="flex items-center space-x-2.5">
+            <button onclick="toggleVideoFeed()" class="text-slate-500 hover:text-indigo-600 bg-white/80 border border-slate-200/80 hover:border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-1.5 shadow-sm active:scale-95">
+                <i class="fa-solid fa-eye-slash text-[10px]"></i>
+                <span class="text-[11px]">Toggle Video Feed</span>
+            </button>
+            
+            <div class="flex items-center space-x-2 bg-white/80 px-3.5 py-1.5 rounded-xl border border-slate-200/80 shadow-sm">
+                <span class="relative flex h-2 w-2">
+                    <span id="status-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span id="status-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                </span>
+                <span id="status-text" class="text-[11px] font-bold text-slate-500 tracking-wide">Connecting Camera...</span>
+            </div>
+
+            <!-- Frame Rate Performance -->
+            <div id="fps-badge" class="hidden sm:flex items-center space-x-1.5 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200/80 text-[11px] text-slate-500 shadow-sm">
+                <i class="fa-solid fa-bolt text-indigo-500"></i>
+                <span><strong id="fps-val" class="text-indigo-600">0</strong> FPS</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dynamic Layout -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Left Workspace Sidebar -->
+        <aside class="w-full lg:w-80 glass-panel border-r border-slate-200/50 p-5 flex flex-col space-y-5 overflow-y-auto shrink-0 z-10">
+            
+            <!-- Onboarding Wake Engine Activation Card -->
+            <div id="audio-warning" class="bg-gradient-to-br from-indigo-50/70 to-purple-50/50 p-4 rounded-xl border border-indigo-100/40 shadow-sm flex flex-col items-center text-center">
+                <div class="h-8 w-8 bg-white rounded-lg shadow-sm flex items-center justify-center mb-2.5">
+                    <i class="fa-solid fa-volume-high text-indigo-500 text-sm"></i>
+                </div>
+                <h3 class="text-xs font-bold text-slate-800">Activate Sound Engine</h3>
+                <p class="text-[10px] text-slate-500 mt-1 mb-3 leading-relaxed">Browsers require user interaction to trigger custom audio. Wake the engine below.</p>
+                <button id="btn-activate-audio" class="w-full bg-brand-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition duration-200 shadow-md shadow-indigo-100 flex items-center justify-center space-x-1.5 active:scale-95">
+                    <i class="fa-solid fa-wave-square text-[10px]"></i>
+                    <span>Initialize Engine</span>
+                </button>
+            </div>
+
+            <!-- Preset Instrument Profiles Selection -->
+            <div class="space-y-2.5">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sound Profile</label>
+                    <span class="text-[9px] text-indigo-500 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">HD FM Synth</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setSynthPreset('piano')" id="preset-piano" class="preset-btn active text-left p-3 rounded-xl border transition-all duration-150 bg-indigo-500/10 border-indigo-200 text-indigo-950 active:scale-95">
+                        <span class="block text-xs font-bold text-slate-800">Grand Piano</span>
+                        <span class="text-[9px] text-slate-400 block mt-0.5">Warm attack</span>
+                    </button>
+                    <button onclick="setSynthPreset('synth')" id="preset-synth" class="preset-btn text-left p-3 rounded-xl border transition-all duration-150 bg-white hover:bg-slate-50 border-slate-200 text-slate-600 active:scale-95">
+                        <span class="block text-xs font-bold text-slate-700">Celestial Wave</span>
+                        <span class="text-[9px] text-slate-400 block mt-0.5">Shimmering leads</span>
+                    </button>
+                    <button onclick="setSynthPreset('retro')" id="preset-retro" class="preset-btn text-left p-3 rounded-xl border transition-all duration-150 bg-white hover:bg-slate-50 border-slate-200 text-slate-600 active:scale-95">
+                        <span class="block text-xs font-bold text-slate-700">Chiptune Retro</span>
+                        <span class="text-[9px] text-slate-400 block mt-0.5">Crisp square bits</span>
+                    </button>
+                    <button onclick="setSynthPreset('drone')" id="preset-drone" class="preset-btn text-left p-3 rounded-xl border transition-all duration-150 bg-white hover:bg-slate-50 border-slate-200 text-slate-600 active:scale-95">
+                        <span class="block text-xs font-bold text-slate-700">Space Pad</span>
+                        <span class="text-[9px] text-slate-400 block mt-0.5">Deep continuous hum</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Playback Mode Modifier (Keyboard Trigger vs Continuous Theremin Slider) -->
+            <div class="space-y-2.5 border-t border-slate-100 pt-4">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                    Play Mode Mode
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setPlayMode('trigger')" id="mode-trigger" class="play-mode-btn active p-2.5 rounded-xl border text-center transition-all text-xs font-bold bg-indigo-50 border-indigo-200 text-indigo-600">
+                        <i class="fa-solid fa-grip-vertical mr-1"></i> Piano Keys
+                    </button>
+                    <button onclick="setPlayMode('theremin')" id="mode-theremin" class="play-mode-btn p-2.5 rounded-xl border text-center transition-all text-xs font-bold bg-white border-slate-200 text-slate-500 hover:bg-slate-50">
+                        <i class="fa-solid fa-circle-nodes mr-1"></i> Theremin Slide
+                    </button>
+                </div>
+                <p id="mode-description" class="text-[10px] text-slate-400 leading-normal transition-all">
+                    Piano mode plays a clean trigger sound when your index finger drops into the visual keyboard grids.
+                </p>
+            </div>
+
+            <!-- Scale & Music Harmony Engine -->
+            <div class="space-y-3 border-t border-slate-100 pt-4">
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Musical Scale</label>
+                    <select id="scale-selector" class="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-700 outline-none focus:border-indigo-400 transition shadow-sm">
+                        <option value="major">C Major (Bright & Happy)</option>
+                        <option value="minor">A Natural Minor (Moody & Mystic)</option>
+                        <option value="pentatonic">C Pentatonic (Ethereal & Calm)</option>
+                        <option value="blues">C Blues Scale (Jazz & Soulful)</option>
+                    </select>
+                </div>
+
+                <!-- Octave slider -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Octave Shift</label>
+                        <span id="octave-label" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">C4</span>
+                    </div>
+                    <input id="octave-slider" type="range" min="2" max="5" value="4" class="w-full cursor-pointer">
+                    <div class="flex justify-between text-[8px] text-slate-400 font-bold uppercase">
+                        <span>Bass (C2)</span>
+                        <span>Mid (C4)</span>
+                        <span>High (C5)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Synthesis Acoustics Controls -->
+            <div class="space-y-3.5 border-t border-slate-100 pt-4">
+                <h4 class="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Acoustic Parameters</h4>
+                
+                <!-- Decay Release Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-500 font-medium">Decay Release (Sustain)</span>
+                        <span id="sustain-val" class="text-indigo-600 font-bold">1.2s</span>
+                    </div>
+                    <input id="sustain-slider" type="range" min="0.2" max="3" step="0.1" value="1.2" class="w-full cursor-pointer">
+                </div>
+
+                <!-- Delay Echo Feedback Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-500 font-medium">Space Echo (Reverb)</span>
+                        <span id="echo-val" class="text-indigo-600 font-bold">30%</span>
+                    </div>
+                    <input id="echo-slider" type="range" min="0" max="80" step="5" value="30" class="w-full cursor-pointer">
+                </div>
+
+                <!-- Lowpass Filter Cutoff Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-500 font-medium">Warm Filter Cutoff</span>
+                        <span id="filter-val" class="text-indigo-600 font-bold">1800 Hz</span>
+                    </div>
+                    <input id="filter-slider" type="range" min="200" max="5000" step="100" value="1800" class="w-full cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Master Gain Volume -->
+            <div class="space-y-2 border-t border-slate-100 pt-4 mt-auto">
+                <div class="flex justify-between items-center text-[10px] text-slate-400 font-bold tracking-wider">
+                    <span>MASTER VOL LEVEL</span>
+                    <span id="volume-val" class="text-indigo-600">80%</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-volume-low text-slate-400 text-xs"></i>
+                    <input id="volume-slider" type="range" min="0" max="100" value="80" class="w-full cursor-pointer">
+                    <i class="fa-solid fa-volume-high text-slate-400 text-xs"></i>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center Dynamic Visual Studio Stage -->
+        <section class="flex-1 p-5 flex flex-col space-y-4 overflow-hidden min-w-0">
+            
+            <!-- Contextual Quick Instruction Banner -->
+            <div class="bg-white/60 border border-slate-200/60 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                <div class="flex items-start space-x-3 max-w-lg">
+                    <div class="h-8 w-8 rounded-xl bg-indigo-50 flex items-center justify-center border border-indigo-100/50 shrink-0">
+                        <i class="fa-solid fa-circle-info text-indigo-500 text-xs animate-pulse"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-bold text-slate-800">Air Space Playground</h4>
+                        <p class="text-[10px] text-slate-400 mt-0.5 leading-normal">Position your hand in direct view of your camera. Raise your index finger to write music touchlessly in the sky.</p>
+                    </div>
+                </div>
+                
+                <!-- Practicing tutorial selection -->
+                <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl shadow-sm">
+                    <label class="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide"><i class="fa-solid fa-book-open"></i> Tutor:</label>
+                    <select id="song-practice-selector" class="bg-transparent border-none text-[11px] font-bold text-slate-700 outline-none cursor-pointer">
+                        <option value="none">Free Play / Jam Session</option>
+                        <option value="ode">Ode to Joy (Beethoven)</option>
+                        <option value="twinkle">Twinkle Twinkle Little Star</option>
+                        <option value="mary">Mary Had a Little Lamb</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Virtual Canvas Arena Screen -->
+            <div class="flex-1 relative rounded-2xl border border-slate-200/60 bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                
+                <!-- Camera initializing overlay state -->
+                <div id="loading-overlay" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-50/95 text-center p-6 transition-all duration-300">
+                    <div class="relative flex items-center justify-center mb-4">
+                        <div class="animate-ping absolute inline-flex h-10 w-10 rounded-full bg-indigo-500/15 opacity-75"></div>
+                        <div class="h-8 w-8 rounded-full border-2 border-indigo-100 border-t-indigo-500 animate-spin"></div>
+                    </div>
+                    <h3 class="text-xs font-bold text-slate-800">Initializing Tracking Grid</h3>
+                    <p class="text-[10px] text-slate-400 mt-1 max-w-xs px-6 leading-relaxed">Mounting neural frameworks for physical key detection. Please allow camera access when requested by your device.</p>
+                </div>
+
+                <!-- Main Canvas output (draws landmarks and interactive pointer coordinates) -->
+                <canvas id="output_canvas" class="absolute w-full h-full object-cover rounded-2xl"></canvas>
+                
+                <!-- Silent Camera input stream -->
+                <video id="webcam" class="hidden" autoplay playsinline></video>
+
+                <!-- Onboarding & Song Guide Overlay -->
+                <div id="song-guide-card" class="hidden absolute top-4 left-4 right-4 bg-white/90 backdrop-blur-md border border-slate-200/50 rounded-2xl py-3 px-4 flex items-center justify-between shadow-md transition duration-300 z-10">
+                    <div class="flex items-center space-x-3">
+                        <div class="h-7 w-7 bg-indigo-50 rounded-lg flex items-center justify-center border border-indigo-100 text-indigo-600">
+                            <i class="fa-solid fa-music text-[10px] animate-bounce"></i>
+                        </div>
+                        <div>
+                            <span class="text-[8px] uppercase font-bold text-slate-400 tracking-wider block">Tutorial Step Active</span>
+                            <h5 id="song-guide-title" class="text-xs font-bold text-slate-800">Song Name</h5>
+                        </div>
+                    </div>
+                    <!-- Displayed Step Notes -->
+                    <div class="flex items-center space-x-2">
+                        <span class="text-[10px] text-slate-400 font-semibold">Play This:</span>
+                        <span id="song-target-badge" class="bg-indigo-600 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-sm">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Virtual Keyboard Diagnostic Deck -->
+            <div class="grid grid-cols-8 gap-1.5 shrink-0" id="visual-trigger-deck">
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="0">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 1</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">C</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="1">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 2</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">D</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="2">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 3</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">E</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="3">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 4</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">F</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="4">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 5</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">G</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="5">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 6</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">A</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="6">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 7</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">B</span>
+                </div>
+                <div class="diag-key border border-slate-200/60 bg-white py-2 rounded-xl text-center shadow-sm transition-all duration-150" data-key="7">
+                    <span class="block text-[8px] text-slate-400 font-extrabold uppercase tracking-wide">Key 8</span>
+                    <span class="note-lbl block text-xs font-bold text-slate-700 mt-0.5">C2</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Sidebar Details Panel -->
+        <aside class="w-full lg:w-80 glass-panel border-l border-slate-200/50 p-5 flex flex-col space-y-5 overflow-y-auto shrink-0 z-10">
+            
+            <!-- Quick Interactive Guides -->
+            <div class="space-y-3">
+                <h4 class="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider flex items-center">
+                    <i class="fa-solid fa-graduation-cap mr-2 text-indigo-500"></i>
+                    Interactive Playing Instructions
+                </h4>
+                <div class="space-y-2">
+                    <div class="flex items-start space-x-2.5 text-[11px] text-slate-500 bg-white/50 p-2.5 rounded-xl border border-slate-200/40">
+                        <span class="bg-indigo-50 text-indigo-600 font-bold h-4 w-4 rounded flex items-center justify-center shrink-0 border border-indigo-100 text-[9px]">1</span>
+                        <p class="leading-relaxed">Verify your face and hand are well-lit with clear space behind you.</p>
+                    </div>
+                    <div class="flex items-start space-x-2.5 text-[11px] text-slate-500 bg-white/50 p-2.5 rounded-xl border border-slate-200/40">
+                        <span class="bg-indigo-50 text-indigo-600 font-bold h-4 w-4 rounded flex items-center justify-center shrink-0 border border-indigo-100 text-[9px]">2</span>
+                        <p class="leading-relaxed">Hover your <strong class="text-slate-700">index finger</strong> directly over the highlighted top sections.</p>
+                    </div>
+                    <div class="flex items-start space-x-2.5 text-[11px] text-slate-500 bg-white/50 p-2.5 rounded-xl border border-slate-200/40">
+                        <span class="bg-indigo-50 text-indigo-600 font-bold h-4 w-4 rounded flex items-center justify-center shrink-0 border border-indigo-100 text-[9px]">3</span>
+                        <p class="leading-relaxed">Switch to <strong class="text-slate-700">Theremin Glide</strong> for fluid frequency movements.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Physical Play Backup (Tactile Mouse Triggers) -->
+            <div class="space-y-3 flex-1 flex flex-col min-h-0 border-t border-slate-100 pt-4">
+                <h4 class="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider flex items-center">
+                    <i class="fa-solid fa-keyboard mr-2 text-indigo-500"></i>
+                    Backup Tactile Keypads
+                </h4>
+                <p class="text-[10px] text-slate-400 leading-normal">Webcam not connected or active? Click any pad instantly below to play notes manually.</p>
+                
+                <!-- Tactile Backup Keys Grid -->
+                <div class="grid grid-cols-4 gap-2 content-start">
+                    <button onclick="playManualKey(0)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        C
+                    </button>
+                    <button onclick="playManualKey(1)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        D
+                    </button>
+                    <button onclick="playManualKey(2)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        E
+                    </button>
+                    <button onclick="playManualKey(3)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        F
+                    </button>
+                    <button onclick="playManualKey(4)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        G
+                    </button>
+                    <button onclick="playManualKey(5)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        A
+                    </button>
+                    <button onclick="playManualKey(6)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        B
+                    </button>
+                    <button onclick="playManualKey(7)" class="manual-trigger hover:bg-indigo-50/50 bg-white border border-slate-200 hover:border-indigo-300 py-3 rounded-xl text-slate-700 text-xs font-bold transition shadow-sm active:scale-90">
+                        C2
+                    </button>
+                </div>
+            </div>
+
+            <!-- Diagnostics Telemetry Logging Panel -->
+            <div class="bg-slate-100/50 rounded-xl p-3.5 border border-slate-200/40 flex flex-col space-y-1 text-[10px] text-slate-500 font-semibold mt-auto">
+                <div class="flex justify-between items-center pb-1.5 border-b border-slate-200/60 mb-1">
+                    <span class="text-[9px] uppercase tracking-wide text-slate-400">Live Telemetry</span>
+                    <span class="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Tracker Engine:</span>
+                    <span id="log-tracker-status" class="text-slate-400 font-bold">Uninitialized</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Focus Column Target:</span>
+                    <span id="log-focus" class="text-indigo-600 font-bold">None</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Active Coordinates:</span>
+                    <span class="font-mono text-slate-400">X: <span id="log-x">--</span>, Y: <span id="log-y">--</span></span>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <script>
+        let audioCtx = null;
+        let masterGain = null;
+        let currentWavePreset = 'piano'; // piano, synth, retro, drone
+        let currentPlayMode = 'trigger'; // trigger (keys) vs theremin (free pitch)
+
+        // Musical scales mapping frequencies
+        const scaleNotes = {
+            major: ["C", "D", "E", "F", "G", "A", "B", "C"],
+            minor: ["A", "B", "C", "D", "E", "F", "G", "A"],
+            pentatonic: ["C", "D", "E", "G", "A", "C", "D", "E"],
+            blues: ["C", "Eb", "F", "F#", "G", "Bb", "C", "Eb"]
+        };
+
+        const baseFrequencies = {
+            "C": 261.63, "C#": 277.18, "D": 293.66, "Eb": 311.13, 
+            "E": 329.63, "F": 349.23, "F#": 369.99, "G": 392.00, 
+            "G#": 415.30, "A": 440.00, "Bb": 466.16, "B": 493.88
+        };
+
+        // UI Binding references
+        const activateAudioBtn = document.getElementById('btn-activate-audio');
+        const audioWarning = document.getElementById('audio-warning');
+        const scaleSelector = document.getElementById('scale-selector');
+        const octaveSlider = document.getElementById('octave-slider');
+        const octaveLabel = document.getElementById('octave-label');
+        const sustainSlider = document.getElementById('sustain-slider');
+        const sustainVal = document.getElementById('sustain-val');
+        const echoSlider = document.getElementById('echo-slider');
+        const echoVal = document.getElementById('echo-val');
+        const filterSlider = document.getElementById('filter-slider');
+        const filterVal = document.getElementById('filter-val');
+        const volumeSlider = document.getElementById('volume-slider');
+        const volumeVal = document.getElementById('volume-val');
+        const songPracticeSelector = document.getElementById('song-practice-selector');
+        const songGuideCard = document.getElementById('song-guide-card');
+        const songGuideTitle = document.getElementById('song-guide-title');
+        const songTargetBadge = document.getElementById('song-target-badge');
+
+        const songsMap = {
+            ode: {
+                title: "Beethoven's Ode to Joy",
+                keys: [2, 2, 3, 4, 4, 3, 2, 1, 0, 0, 1, 2, 2, 1, 1],
+                noteNames: ["E", "E", "F", "G", "G", "F", "E", "D", "C", "C", "D", "E", "E", "D", "D"]
+            },
+            twinkle: {
+                title: "Twinkle Twinkle Little Star",
+                keys: [0, 0, 4, 4, 5, 5, 4, 3, 3, 2, 2, 1, 1, 0],
+                noteNames: ["C", "C", "G", "G", "A", "A", "G", "F", "F", "E", "E", "D", "D", "C"]
+            },
+            mary: {
+                title: "Mary Had a Little Lamb",
+                keys: [2, 1, 0, 1, 2, 2, 2, 1, 1, 1, 2, 4, 4],
+                noteNames: ["E", "D", "C", "D", "E", "E", "E", "D", "D", "D", "E", "G", "G"]
+            }
+        };
+
+        let activeSongPlaying = "none";
+        let activeSongIndex = 0;
+
+        activateAudioBtn.addEventListener('click', () => {
+            initAudioEngine();
+        });
+
+        // Initialize Audio context with visual feedback
+        function initAudioEngine() {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Set up visual confirmation
+                masterGain = audioCtx.createGain();
+                masterGain.gain.setValueAtTime(parseFloat(volumeSlider.value) / 100 * 0.45, audioCtx.currentTime);
+                masterGain.connect(audioCtx.destination);
+                
+                audioWarning.classList.add('hidden');
+                updateStatusIndicator("ready", "Synthesizer Ready");
+                console.log("Audio pipeline initialized successfully.");
+            } catch (err) {
+                console.error("Audio Context could not be created:", err);
+            }
+        }
+
+        // Calculate specific frequency depending on octave and scale modifiers
+        function getFreqForKey(keyIndex) {
+            const currentScaleName = scaleSelector.value;
+            const currentScalePattern = scaleNotes[currentScaleName];
+            const baseOctave = parseInt(octaveSlider.value);
+            
+            const noteName = currentScalePattern[keyIndex] || "C";
+            let octaveOffset = 0;
+            
+            if (keyIndex > 0 && noteName === 'C' && currentScaleName !== 'pentatonic') {
+                octaveOffset = 1;
+            }
+            if (keyIndex >= 5 && currentScaleName === 'pentatonic') {
+                octaveOffset = 1;
+            }
+            if (keyIndex >= 6 && currentScaleName === 'blues') {
+                octaveOffset = 1;
+            }
+
+            const multiplier = Math.pow(2, (baseOctave + octaveOffset) - 4);
+            const freq = (baseFrequencies[noteName] || baseFrequencies[noteName[0]] || 261.63) * multiplier;
+            return freq;
+        }
+
+        // Web Audio note generation engine
+        function triggerSynthNote(freq) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const now = audioCtx.currentTime;
+            
+            const osc = audioCtx.createOscillator();
+            const noteGain = audioCtx.createGain();
+            const biquadFilter = audioCtx.createBiquadFilter();
+            
+            biquadFilter.type = 'lowpass';
+            biquadFilter.frequency.setValueAtTime(parseFloat(filterSlider.value), now);
+            biquadFilter.Q.setValueAtTime(1.5, now);
+
+            // Synthesizer wave-shaping types
+            if (currentWavePreset === 'piano') {
+                osc.type = 'triangle';
+                
+                // Create warm sub-octave layer to replicate grand piano depth
+                const subOsc = audioCtx.createOscillator();
+                subOsc.type = 'sine';
+                subOsc.frequency.setValueAtTime(freq * 0.5, now);
+                const subGain = audioCtx.createGain();
+                subGain.gain.setValueAtTime(0.12, now);
+                subOsc.connect(subGain);
+                subGain.connect(biquadFilter);
+                subOsc.start(now);
+                subOsc.stop(now + parseFloat(sustainSlider.value));
+            } else if (currentWavePreset === 'synth') {
+                osc.type = 'sawtooth';
+                osc.detune.setValueAtTime(10, now);
+            } else if (currentWavePreset === 'retro') {
+                osc.type = 'square';
+            } else if (currentWavePreset === 'drone') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq - 1.0, now);
+                
+                const spaceOsc = audioCtx.createOscillator();
+                spaceOsc.type = 'sine';
+                spaceOsc.frequency.setValueAtTime(freq * 1.5, now);
+                const spaceGain = audioCtx.createGain();
+                spaceGain.gain.setValueAtTime(0.1, now);
+                spaceOsc.connect(spaceGain);
+                spaceGain.connect(biquadFilter);
+                spaceOsc.start(now);
+                spaceOsc.stop(now + parseFloat(sustainSlider.value) * 1.5);
+            }
+
+            osc.frequency.setValueAtTime(freq, now);
+
+            const attackTime = currentWavePreset === 'drone' ? 0.4 : 0.015;
+            const decayTime = parseFloat(sustainSlider.value);
+            
+            noteGain.gain.setValueAtTime(0, now);
+            noteGain.gain.linearRampToValueAtTime(0.55, now + attackTime);
+            noteGain.gain.exponentialRampToValueAtTime(0.001, now + attackTime + decayTime);
+
+            // Reverb delay loop calculations
+            const echoAmount = parseFloat(echoSlider.value) / 100;
+            if (echoAmount > 0) {
+                const delayNode = audioCtx.createDelay(1.5);
+                delayNode.delayTime.setValueAtTime(0.3, now);
+                
+                const feedbackGain = audioCtx.createGain();
+                feedbackGain.gain.setValueAtTime(echoAmount, now);
+                
+                noteGain.connect(delayNode);
+                delayNode.connect(feedbackGain);
+                feedbackGain.connect(delayNode);
+                delayNode.connect(masterGain);
+            }
+
+            osc.connect(biquadFilter);
+            biquadFilter.connect(noteGain);
+            noteGain.connect(masterGain);
+
+            osc.start(now);
+            osc.stop(now + attackTime + decayTime + 0.5);
+        }
+
+        // Change presets UI state
+        function setSynthPreset(presetType) {
+            currentWavePreset = presetType;
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.className = "preset-btn text-left p-3 rounded-xl border transition-all duration-150 bg-white hover:bg-slate-50 border-slate-200 text-slate-600 active:scale-95";
+            });
+            const activeBtn = document.getElementById(`preset-${presetType}`);
+            if (activeBtn) {
+                activeBtn.className = "preset-btn active text-left p-3 rounded-xl border transition-all duration-150 bg-indigo-500/10 border-indigo-200 text-indigo-950 active:scale-95";
+            }
+        }
+
+        // Modify playback behavior (Trigger vs Theremin Slider)
+        function setPlayMode(mode) {
+            currentPlayMode = mode;
+            document.querySelectorAll('.play-mode-btn').forEach(btn => {
+                btn.className = "play-mode-btn p-2.5 rounded-xl border text-center transition-all text-xs font-bold bg-white border-slate-200 text-slate-500 hover:bg-slate-50";
+            });
+            const activeBtn = document.getElementById(`mode-${mode}`);
+            if (activeBtn) {
+                activeBtn.className = "play-mode-btn active p-2.5 rounded-xl border text-center transition-all text-xs font-bold bg-indigo-50 border-indigo-200 text-indigo-600";
+            }
+            
+            const desc = document.getElementById('mode-description');
+            if (mode === 'trigger') {
+                desc.textContent = "Piano mode plays a clean trigger sound when your index finger drops into the visual keyboard grids.";
+            } else {
+                desc.textContent = "Theremin mode lets you glide fluidly across the space. Move horizontally to sweep pitch, and vertically to shape volume.";
+            }
+        }
+
+        // Interactive Music Tutor handler
+        songPracticeSelector.addEventListener('change', () => {
+            const selectedSong = songPracticeSelector.value;
+            if (selectedSong === 'none') {
+                songGuideCard.classList.add('hidden');
+                activeSongPlaying = "none";
+            } else {
+                songGuideCard.classList.remove('hidden');
+                activeSongPlaying = selectedSong;
+                activeSongIndex = 0;
+                
+                // Align to C Major dynamically for simple song tutorials
+                scaleSelector.value = "major";
+                updateDiagnosticNoteLabels();
+                updatePracticeProgress();
+            }
+        });
+
+        // Progress helper
+        function updatePracticeProgress() {
+            if (activeSongPlaying === "none") return;
+            const song = songsMap[activeSongPlaying];
+            const currentRequiredKeyIndex = song.keys[activeSongIndex];
+            const currentRequiredNoteName = song.noteNames[activeSongIndex];
+            
+            songGuideTitle.innerText = `${song.title} (${activeSongIndex + 1}/${song.keys.length})`;
+            songTargetBadge.innerText = `Key ${currentRequiredKeyIndex + 1} (${currentRequiredNoteName})`;
+        }
+
+        function checkPracticedNote(keyIndex) {
+            if (activeSongPlaying === "none") return;
+            const song = songsMap[activeSongPlaying];
+            const targetKey = song.keys[activeSongIndex];
+            
+            if (keyIndex === targetKey) {
+                activeSongIndex++;
+                if (activeSongIndex >= song.keys.length) {
+                    activeSongIndex = 0; // repeat
+                }
+                updatePracticeProgress();
+            }
+        }
+
+        // Diagnostic panel label update helper
+        function updateDiagnosticNoteLabels() {
+            const scaleName = scaleSelector.value;
+            const notes = scaleNotes[scaleName];
+            const diagnosticKeys = document.querySelectorAll('.diag-key');
+            diagnosticKeys.forEach((elem, index) => {
+                const label = elem.querySelector('.note-lbl');
+                if (label && notes[index]) {
+                    label.innerText = notes[index];
+                }
+            });
+        }
+
+        // Click-triggered manual synthesis backup
+        function playManualKey(keyIdx) {
+            if (!audioCtx) {
+                initAudioEngine();
+            }
+            const freq = getFreqForKey(keyIdx);
+            triggerSynthNote(freq);
+            triggerVisualKeyGlow(keyIdx);
+            checkPracticedNote(keyIdx);
+        }
+
+        function triggerVisualKeyGlow(keyIdx) {
+            const keyElem = document.querySelector(`.diag-key[data-key="${keyIdx}"]`);
+            if (keyElem) {
+                keyElem.classList.remove('border-slate-200/60', 'bg-white');
+                keyElem.classList.add('border-indigo-500', 'bg-indigo-50/70', 'scale-95');
+                setTimeout(() => {
+                    keyElem.classList.remove('border-indigo-500', 'bg-indigo-50/70', 'scale-95');
+                    keyElem.classList.add('border-slate-200/60', 'bg-white');
+                }, 180);
+            }
+        }
+
+        // Synchronize settings sliders to variables
+        scaleSelector.addEventListener('change', updateDiagnosticNoteLabels);
+        octaveSlider.addEventListener('input', () => {
+            octaveLabel.innerText = `C${octaveSlider.value}`;
+        });
+        sustainSlider.addEventListener('input', () => {
+            sustainVal.innerText = `${sustainSlider.value}s`;
+        });
+        echoSlider.addEventListener('input', () => {
+            echoVal.innerText = `${echoSlider.value}%`;
+        });
+        filterSlider.addEventListener('input', () => {
+            filterVal.innerText = `${filterSlider.value} Hz`;
+        });
+        volumeSlider.addEventListener('input', () => {
+            const vol = volumeSlider.value;
+            volumeVal.innerText = `${vol}%`;
+            if (masterGain) {
+                masterGain.gain.setValueAtTime(parseFloat(vol) / 100 * 0.45, audioCtx.currentTime);
+            }
+        });
+
+        updateDiagnosticNoteLabels();
+
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const logTrackerStatus = document.getElementById('log-tracker-status');
+        const logFocus = document.getElementById('log-focus');
+        const logX = document.getElementById('log-x');
+        const logY = document.getElementById('log-y');
+
+        let showFeed = true;
+        let lastPlayedKey = -1;
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+        let pointerTrail = []; // particle trace array
+        let thereminOscNode = null; 
+        let thereminGainNode = null;
+
+        function updateStatusIndicator(state, message) {
+            const indicator = document.getElementById('status-indicator');
+            const ping = document.getElementById('status-ping');
+            const txt = document.getElementById('status-text');
+            
+            if (state === "ready") {
+                indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+                ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                txt.textContent = message || "Tracking Enabled";
+                logTrackerStatus.className = "text-emerald-600 font-bold";
+                logTrackerStatus.innerText = "Tracking Hand";
+            } else if (state === "waiting") {
+                indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-400";
+                ping.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75";
+                txt.textContent = message || "Finding Hand...";
+                logTrackerStatus.className = "text-amber-500 font-bold";
+                logTrackerStatus.innerText = "Searching Frame";
+            } else {
+                indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-rose-500";
+                ping.className = "";
+                txt.textContent = message || "Camera Paused";
+                logTrackerStatus.className = "text-rose-500 font-bold";
+                logTrackerStatus.innerText = "Offline";
+            }
+        }
+
+        function toggleVideoFeed() {
+            showFeed = !showFeed;
+        }
+
+        // Frame loop processing callback
+        function onResults(results) {
+            const currentTime = Date.now();
+            frameCount++;
+            if (currentTime - lastFrameTime >= 1000) {
+                document.getElementById('fps-badge').classList.remove('hidden');
+                document.getElementById('fps-val').innerText = frameCount;
+                frameCount = 0;
+                lastFrameTime = currentTime;
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // Responsive auto sizing configuration
+            if (canvasElement.width !== canvasElement.parentElement.clientWidth || 
+                canvasElement.height !== canvasElement.parentElement.clientHeight) {
+                canvasElement.width = canvasElement.parentElement.clientWidth;
+                canvasElement.height = canvasElement.parentElement.clientHeight;
+            }
+
+            const canvasW = canvasElement.width;
+            const canvasH = canvasElement.height;
+
+            // Draw webcam frame or placeholder grid on canvas
+            if (showFeed && results.image) {
+                canvasCtx.translate(canvasW, 0);
+                canvasCtx.scale(-1, 1);
+                canvasCtx.drawImage(results.image, 0, 0, canvasW, canvasH);
+                canvasCtx.setTransform(1, 0, 0, 1, 0, 0);
+            } else {
+                // High-end minimalist studio grid
+                canvasCtx.fillStyle = '#fafafb';
+                canvasCtx.fillRect(0, 0, canvasW, canvasH);
+                
+                canvasCtx.strokeStyle = 'rgba(79, 70, 229, 0.03)';
+                canvasCtx.lineWidth = 1;
+                for (let i = 0; i < canvasW; i += 40) {
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(i, 0);
+                    canvasCtx.lineTo(i, canvasH);
+                    canvasCtx.stroke();
+                }
+            }
+
+            // Hide startup loader
+            if (loadingOverlay) {
+                loadingOverlay.classList.add('hidden');
+            }
+
+            const numKeys = 8;
+            const keyZoneHeight = canvasH * 0.32; // Piano key boundary triggers
+            const keyWidth = canvasW / numKeys;
+
+            if (currentPlayMode === 'trigger') {
+                killThereminOsc();
+
+                // Draw translucent columns
+                for (let i = 0; i < numKeys; i++) {
+                    const noteLabel = scaleNotes[scaleSelector.value][i] || "";
+                    const keyLeft = i * keyWidth;
+                    
+                    if (lastPlayedKey === i) {
+                        // High-fidelity active key gradient highlight
+                        const grad = canvasCtx.createLinearGradient(keyLeft, 0, keyLeft, keyZoneHeight);
+                        grad.addColorStop(0, 'rgba(99, 102, 241, 0.18)');
+                        grad.addColorStop(0.5, 'rgba(236, 72, 153, 0.08)');
+                        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                        canvasCtx.fillStyle = grad;
+                        canvasCtx.fillRect(keyLeft, 0, keyWidth, keyZoneHeight);
+                        
+                        canvasCtx.strokeStyle = 'rgba(79, 70, 229, 0.65)';
+                        canvasCtx.lineWidth = 3.5;
+                    } else {
+                        // Clean borders
+                        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        canvasCtx.fillRect(keyLeft, 0, keyWidth, keyZoneHeight);
+                        
+                        canvasCtx.strokeStyle = 'rgba(100, 116, 139, 0.06)';
+                        canvasCtx.lineWidth = 1;
+                    }
+
+                    canvasCtx.strokeRect(keyLeft, 0, keyWidth, keyZoneHeight);
+
+                    // Render elegant node text values
+                    canvasCtx.fillStyle = lastPlayedKey === i ? '#4f46e5' : '#94a3b8';
+                    canvasCtx.font = "bold 13px 'Plus Jakarta Sans', sans-serif";
+                    canvasCtx.textAlign = 'center';
+                    canvasCtx.fillText(noteLabel, keyLeft + (keyWidth / 2), keyZoneHeight - 22);
+                }
+            } else {
+                // Theremin mode guiding overlays
+                canvasCtx.fillStyle = 'rgba(79, 70, 229, 0.015)';
+                canvasCtx.fillRect(0, 0, canvasW, canvasH);
+                
+                // Centered horizontal helper line
+                canvasCtx.strokeStyle = 'rgba(79, 70, 229, 0.08)';
+                canvasCtx.lineWidth = 2;
+                canvasCtx.setLineDash([6, 6]);
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(0, canvasH * 0.5);
+                canvasCtx.lineTo(canvasW, canvasH * 0.5);
+                canvasCtx.stroke();
+                canvasCtx.setLineDash([]);
+                
+                canvasCtx.fillStyle = '#6366f1';
+                canvasCtx.font = "bold 10px 'Plus Jakarta Sans', sans-serif";
+                canvasCtx.textAlign = 'center';
+                canvasCtx.fillText("GLIDE HORIZONTALLY (PITCH) · VERTICALLY (MODULATION)", canvasW / 2, 28);
+            }
+
+            let handActive = false;
+
+            // Handle hand landmarks detection
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handActive = true;
+                updateStatusIndicator("ready");
+
+                const landmarks = results.multiHandLandmarks[0];
+                const indexTip = landmarks[8]; // Index finger tip ID
+                
+                // Flip X coordinates naturally for mirrored view
+                const rawX = 1 - indexTip.x;
+                const rawY = indexTip.y;
+
+                const px = rawX * canvasW;
+                const py = rawY * canvasH;
+
+                logX.innerText = px.toFixed(0);
+                logY.innerText = py.toFixed(0);
+
+                // Add to particle trails
+                pointerTrail.push({ x: px, y: py, r: 12, alpha: 1, color: '139, 92, 246' });
+                if (pointerTrail.length > 25) pointerTrail.shift();
+
+                if (currentPlayMode === 'trigger') {
+                    if (py < keyZoneHeight) {
+                        const targetCol = Math.floor(px / keyWidth);
+                        logFocus.innerText = `Key ${targetCol + 1} (${scaleNotes[scaleSelector.value][targetCol]})`;
+                        logFocus.className = "text-indigo-600 font-extrabold";
+
+                        if (targetCol !== lastPlayedKey && targetCol >= 0 && targetCol < numKeys) {
+                            lastPlayedKey = targetCol;
+                            
+                            const freqValue = getFreqForKey(targetCol);
+                            triggerSynthNote(freqValue);
+                            triggerVisualKeyGlow(targetCol);
+                            checkPracticedNote(targetCol);
+                        }
+                    } else {
+                        lastPlayedKey = -1;
+                        logFocus.innerText = "Skeletal Air Space";
+                        logFocus.className = "text-slate-400";
+                    }
+                } else {
+                    lastPlayedKey = -1;
+                    logFocus.innerText = "Glide Mode Active";
+                    logFocus.className = "text-indigo-500 font-extrabold";
+
+                    if (audioCtx) {
+                        const freqGlide = 130 + (rawX * 650); // Continuous frequency sweep range
+                        const volumeGlide = Math.min(0.35, 1 - rawY); // Closer to top is louder
+                        
+                        updateThereminSound(freqGlide, volumeGlide);
+                    }
+                }
+
+                // Render aesthetic hand skeleton points
+                for (let i = 0; i < landmarks.length; i++) {
+                    const lPt = landmarks[i];
+                    const lx = (1 - lPt.x) * canvasW;
+                    const ly = lPt.y * canvasH;
+                    
+                    canvasCtx.beginPath();
+                    // Landmark points are drawn as simple premium dots
+                    canvasCtx.fillStyle = i === 8 ? 'rgba(79, 70, 229, 0.85)' : 'rgba(79, 70, 229, 0.28)';
+                    canvasCtx.arc(lx, ly, i === 8 ? 6 : 3, 0, 2 * Math.PI);
+                    canvasCtx.fill();
+                }
+            } else {
+                lastPlayedKey = -1;
+                logFocus.innerText = "No Hand Tracked";
+                logFocus.className = "text-slate-400 font-bold";
+                
+                killThereminOsc();
+            }
+
+            if (!handActive) {
+                updateStatusIndicator("waiting");
+            }
+
+            // Draw organic trail elements on canvas
+            for (let idx = 0; idx < pointerTrail.length; idx++) {
+                const pt = pointerTrail[idx];
+                pt.alpha -= 0.04;
+                pt.r -= 0.35;
+                if (pt.alpha > 0 && pt.r > 0) {
+                    canvasCtx.beginPath();
+                    canvasCtx.fillStyle = `rgba(${pt.color}, ${pt.alpha})`;
+                    canvasCtx.arc(pt.x, pt.y, pt.r, 0, 2 * Math.PI);
+                    canvasCtx.fill();
+                }
+            }
+
+            canvasCtx.restore();
+        }
+
+        // Handle Theremin audio oscillators
+        function updateThereminSound(freq, volume) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const now = audioCtx.currentTime;
+
+            if (!thereminOscNode) {
+                thereminOscNode = audioCtx.createOscillator();
+                thereminGainNode = audioCtx.createGain();
+                
+                thereminOscNode.type = 'sine';
+                thereminOscNode.frequency.setValueAtTime(freq, now);
+                thereminGainNode.gain.setValueAtTime(0, now);
+                
+                thereminOscNode.connect(thereminGainNode);
+                thereminGainNode.connect(masterGain);
+                
+                thereminOscNode.start(now);
+            }
+
+            // Smooth linear ramps prevent clicks or latency pops
+            thereminOscNode.frequency.setTargetAtTime(freq, now, 0.07);
+            thereminGainNode.gain.setTargetAtTime(volume * 0.45, now, 0.07);
+        }
+
+        function killThereminOsc() {
+            if (thereminOscNode) {
+                try {
+                    thereminOscNode.stop();
+                } catch(e){}
+                thereminOscNode = null;
+                thereminGainNode = null;
+            }
+        }
+
+        // Load and setup MediaPipe tracking library
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // Start high-performance camera capture
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 640,
+            height: 480
+        });
+
+        camera.start().catch(err => {
+            console.warn("Camera setup declined or blocked. Initializing Backup Mode:", err);
+            updateStatusIndicator("error", "Webcam Access Required");
+            if (loadingOverlay) {
+                loadingOverlay.innerHTML = `
+                    <div class="h-10 w-10 rounded-xl bg-amber-50 text-amber-500 border border-amber-100/50 flex items-center justify-center mb-3">
+                        <i class="fa-solid fa-video text-sm"></i>
+                    </div>
+                    <h3 class="text-xs font-bold text-slate-800">Webcam Stream Paused</h3>
+                    <p class="text-[10px] text-slate-400 mt-1 max-w-sm px-6 leading-relaxed">Device camera access is restricted. Use the interactive <strong>Backup Tactile Keypads</strong> inside the right panel to play and practice melodies immediately!</p>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
